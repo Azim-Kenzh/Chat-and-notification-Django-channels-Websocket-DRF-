@@ -1,0 +1,11 @@
+Django
+psycopg2-binary
+Pillow
+celery
+redis
+drf-yasg
+djangorestframework
+channels
+channels_redis
+selenium
+pyfcm
