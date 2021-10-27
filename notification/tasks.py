@@ -69,8 +69,8 @@ def send_new_message_notification(message_id):
             'id': notification.id
         }
         send_notification(recipient, data_payload, notification.title, notification.message)
-#
-#
+
+
 # @shared_task
 # def send_new_like_notification(post_id, user_id):
 #     from apps.post.models import Post
