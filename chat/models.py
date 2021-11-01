@@ -45,6 +45,23 @@ class Notification(models.Model):
     seen = models.BooleanField(default=False)
 
 
+@receiver(signals.post_save, sender=Notification)
+def pos_save_message(sender, instance, created, **kwargs):
+    from notification.tasks import send_new_message_notification
+
+    if created:
+        send_new_message_notification.delay(instance.id)
+
+
+class ChatStatus(models.Model):
+    chat = models.ForeignKey(ChatSession, on_delete=models.CASCADE, verbose_name='чат', related_name='notifications')
+    user = models.ForeignKey(MyUser, on_delete=models.CASCADE, related_name='notifications')
+    current = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('chat', 'user')
+
+
 @receiver(signals.post_save, sender=Message)
 def pos_save_message(sender, instance, created, **kwargs):
     from notification.tasks import send_new_message_notification

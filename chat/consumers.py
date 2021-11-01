@@ -1,55 +1,3 @@
-# # chat/consumers.py
-# import json
-# from channels.generic.websocket import AsyncWebsocketConsumer
-#
-#
-# class ChatConsumer(AsyncWebsocketConsumer):
-#     async def connect(self):
-#         self.room_name = self.scope['url_route']['kwargs']['room_name']
-#         self.room_group_name = 'chat_%s' % self.room_name
-#
-#         # Join room group
-#         await self.channel_layer.group_add(
-#             self.room_group_name,
-#             self.channel_name
-#         )
-#
-#         await self.accept()
-#
-#     async def disconnect(self, close_code):
-#         # Leave room group
-#         await self.channel_layer.group_discard(
-#             self.room_group_name,
-#             self.channel_name
-#         )
-#
-#     # Receive message from WebSocket
-#     async def receive(self, text_data):
-#         text_data_json = json.loads(text_data)
-#         message = text_data_json['message']
-#
-#         # Send message to room group
-#         await self.channel_layer.group_send(
-#             self.room_group_name,
-#             {
-#                 'type': 'chat_message',
-#                 'message': message
-#             }
-#         )
-#
-#     # Receive message from room group
-#     async def chat_message(self, event):
-#         message = event['message']
-#
-#         # Send message to WebSocket
-#         await self.send(text_data=json.dumps({
-#             'message': message
-#         }))
-
-
-
-"""----------------------------------------------------------------------------"""
-
 import json
 
 from channels.db import database_sync_to_async
@@ -57,15 +5,13 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth import get_user_model
 
 from .serializer import MessageSerializer
-from .models import Message, ChatSession
+from .models import Message, ChatSession, ChatStatus, Notification
 from notification.models import PushNotification
 
 User = get_user_model()
 
 
-TYPING = 'typing'
 NEW_MESSAGE = 'new_message'
-MESSAGE_READ = 'message_read'
 
 
 @database_sync_to_async
@@ -92,6 +38,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
         await self.accept()
+        await update_chat_status(self.chat, self.scope['user'], True)
 
     async def disconnect(self, close_code):
         # Leave group
@@ -99,44 +46,46 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.group_name,
             self.channel_name
         )
+        await update_chat_status(self.chat, self.scope['user'], False)
 
     # Receive message from WebSocket
     async def receive(self, text_data):
         data = json.loads(text_data)
         sending_data = None
-        if data['event'] == TYPING:
-            sending_data = {"chat_id": self.chat.id, **data}
 
-        elif data['event'] == MESSAGE_READ:
-            message_id = await mark_as_read(
-                self.scope['user'],
-                self.other_side,
-                self.chat
-            )
-            sending_data = {"chat_id": self.chat.id, 'message_id': message_id, **data}
-
-        elif data['event'] == NEW_MESSAGE:
-            sending_data = await create_message(
-                self.scope['user'],
-                self.chat,
-                data['text']
-            )
-            sending_data = {'event': data['event'], "message": sending_data}
-        if sending_data['event'] == NEW_MESSAGE:
-            await self.channel_layer.group_send(
-                self.group_name,
-                {
-                    'type': 'chat_message',
-                    'data': sending_data,
-                }
-            )
+        sending_data = await create_message(
+            self.scope['user'],
+            self.chat,
+            data['text']
+        )
+        sending_data = {'event': data['event'], "message": sending_data}
         await self.channel_layer.group_send(
-            self.interlocutor_group,
+            self.group_name,
             {
                 'type': 'chat_message',
                 'data': sending_data,
             }
         )
+        chat_is_open = await check_chat_status(self.scope['user'], self.chat)
+        if chat_is_open:
+            # chat is open, send new message
+            await self.channel_layer.group_send(
+                self.interlocutor_group,
+                {
+                    'type': 'chat_message',
+                    'data': sending_data,
+                }
+            )
+        else:
+            # chat is closed, so create and send notification about new message
+            await create_notification()
+            await self.channel_layer.group_send(
+                f'user_{self.scope["user"].id}',
+                {
+                    'type': 'notify',
+                    'data': sending_data,
+                }
+            )
 
     # Receive message from room group
     async def chat_message(self, event):
@@ -151,6 +100,12 @@ def create_message(sender, chat, text):
 
 
 @database_sync_to_async
+def create_notification(user, chat):
+    message = Notification.objects.create(chat=chat, user=user)
+    return MessageSerializer(message).data
+
+
+@database_sync_to_async
 def mark_as_read(user, other_side, chat):
     messages = Message.objects.filter(sender=other_side, chat_id=chat)
     messages.update(read=True)
@@ -161,3 +116,42 @@ def mark_as_read(user, other_side, chat):
         return messages.last().id
     else:
         return None
+
+
+@database_sync_to_async
+def update_chat_status(user, chat, is_current):
+    chat_status = ChatStatus.objects.get_or_create(chat=chat, user=user)
+    chat_status.current = is_current
+    chat_status.save()
+
+
+@database_sync_to_async
+def check_chat_status(user, chat):
+    chat_status = ChatStatus.objects.get_or_create(chat=chat, user=user)
+    return chat_status.current
+
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.group_name = f'user_{self.scope["user"].id}'  # group for user to send notifications
+
+        # Join group
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name
+        )
+        await self.accept()
+        # await update_chat_status(self.chat, self.scope['user'], True)  # maybe show as online?
+
+    async def disconnect(self, close_code):
+        # Leave group
+        await self.channel_layer.group_discard(
+            self.group_name,
+            self.channel_name
+        )
+        # await update_chat_status(self.chat, self.scope['user'], False)  # maybe show as offline?
+
+    # Receive message from room group
+    async def notify(self, event):
+        # Send message to WebSocket
+        await self.send(text_data=json.dumps(event['data']))
