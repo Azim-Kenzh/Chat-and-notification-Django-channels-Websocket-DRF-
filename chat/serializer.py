@@ -25,7 +25,7 @@
 from rest_framework import serializers
 
 from account.models import MyUser
-from chat.models import Message, ChatSession
+from chat.models import Message, ChatSession, Notification
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -36,12 +36,10 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# class MessageImageSerializer(serializers.ModelSerializer):
-#     image = serializers.ImageField(required=True)
-#
-#     class Meta:
-#         model = Message
-#         fields = ('image',)
+class UpdateNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ('seen', )
 
 
 class MessageFileSerializer(serializers.ModelSerializer):
@@ -52,23 +50,27 @@ class MessageFileSerializer(serializers.ModelSerializer):
         fields = ('file',)
 
 
-class ChatSessionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ChatSession
-        fields = ('id', 'other_side')
+class ChatUserSerializer(serializers.ModelSerializer):
+    has_unread = serializers.BooleanField(default=False)
+    chat_exists = serializers.BooleanField(default=False)
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        representation['other_side'] = MyUser(
-            instance.get_interlocutor(self.context['request'].user),
-            context={'request': self.context['request']}
-        ).data
-        representation['latest_message'] = MessageSerializer(
-            instance.messages.latest('timestamp'),
-            context={'request': self.context['request']}
-        ).data if instance.messages.exists() else None
-        representation['unread_count'] = instance.unread_count
-        return representation
+    class Meta:
+        model = MyUser
+        fields = ('id', 'first_name', 'last_name', 'chat_exists', 'has_unread')
+
+    # def to_representation(self, instance):
+    #     representation = super().to_representation(instance)
+    #     representation['owner'] = instance.owner.first_name and instance.owner.last_name
+    #     return representation
+
+
+    # def to_representation(self, instance):
+    #     representation = super().to_representation(instance)
+    #     representation['other_side'] = MyUser(
+    #         instance.get_interlocutor(self.context.get('request')),
+    #         context={'request': self.context.get('request')}
+    #     ).data
+    #     return representation
 
 
 class ChatSessionDeatilSerializer(serializers.ModelSerializer):

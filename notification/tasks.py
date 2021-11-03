@@ -1,9 +1,9 @@
 from celery import shared_task
 from django.conf import settings
 from pyfcm import FCMNotification
-
-from notification.models import PushNotification, POST_COMMENT, \
-    CHAT_MESSAGE, POST_LIKE
+#
+# from notification.models import PushNotification, POST_COMMENT, \
+#     CHAT_MESSAGE, POST_LIKE
 # from notification.utils import build_absolute_uri
 
 
@@ -37,38 +37,38 @@ from notification.models import PushNotification, POST_COMMENT, \
     #     }
     #     send_notification(recipient, data_payload, notification.title, notification.message)
 
-
-@shared_task
-def send_new_message_notification(message_id):
-    from chat.models import Message
-
-    try:
-        chat_message = Message.objects.get(id=message_id)
-    except Message.DoesNotExist:
-        raise Exception("Message with given id does not exists.")
-    recipient = chat_message.chat.get_interlocutor(chat_message.sender)
-    username = chat_message.sender.get_full_name_or_username()
-    if chat_message.sender != recipient:
-        if chat_message.text:
-            message = f'{username}: "{chat_message.text}"'
-        elif chat_message.image:
-            message = f'{username} sent you new image'
-        else:
-            message = f'{username} sent you new file'
-        image_url = chat_message.sender.photo.url if chat_message.sender.photo else ''
-        notification = PushNotification.objects.create(recipient=recipient,
-                                                       title="New message",
-                                                       message=message,
-                                                       type=CHAT_MESSAGE,
-                                                       object_id=str(chat_message.sender.id))
-                                                       # image_url=build_absolute_uri(image_url))
-        data_payload = {
-            'type': notification.type,
-            'object_id': notification.object_id,
-            'image_url': notification.image_url,
-            'id': notification.id
-        }
-        send_notification(recipient, data_payload, notification.title, notification.message)
+#
+# @shared_task
+# def send_new_message_notification(message_id):
+#     from chat.models import Message
+#
+#     try:
+#         chat_message = Message.objects.get(id=message_id)
+#     except Message.DoesNotExist:
+#         raise Exception("Message with given id does not exists.")
+#     recipient = chat_message.chat.get_interlocutor(chat_message.sender)
+#     username = chat_message.sender.get_full_name_or_username()
+#     if chat_message.sender != recipient:
+#         if chat_message.text:
+#             message = f'{username}: "{chat_message.text}"'
+#         elif chat_message.image:
+#             message = f'{username} sent you new image'
+#         else:
+#             message = f'{username} sent you new file'
+#         image_url = chat_message.sender.photo.url if chat_message.sender.photo else ''
+#         notification = PushNotification.objects.create(recipient=recipient,
+#                                                        title="New message",
+#                                                        message=message,
+#                                                        type=CHAT_MESSAGE,
+#                                                        object_id=str(chat_message.sender.id))
+#                                                        # image_url=build_absolute_uri(image_url))
+#         data_payload = {
+#             'type': notification.type,
+#             'object_id': notification.object_id,
+#             'image_url': notification.image_url,
+#             'id': notification.id
+#         }
+#         send_notification(recipient, data_payload, notification.title, notification.message)
 
 
 # @shared_task
@@ -103,17 +103,17 @@ def send_new_message_notification(message_id):
 #         send_notification(recipient, data_payload, notification.title, notification.message)
 
 
-def send_notification(recipient, data_payload, title, body):
-    fcm = FCMNotification(api_key=settings.FIREBASE_API_KEY)
-    try:
-        if hasattr(recipient, 'device'):
-            return fcm.notify_single_device(
-                registration_id=recipient.device.device,
-                message_title=title,
-                message_body=body,
-                badge=recipient.user_device_notifications.filter(read=False).count(),
-                data_message=data_payload,
-                sound=True
-            )
-    except:
-        pass
+# def send_notification(recipient, data_payload, title, body):
+#     fcm = FCMNotification(api_key=settings.FIREBASE_API_KEY)
+#     try:
+#         if hasattr(recipient, 'device'):
+#             return fcm.notify_single_device(
+#                 registration_id=recipient.device.device,
+#                 message_title=title,
+#                 message_body=body,
+#                 badge=recipient.user_device_notifications.filter(read=False).count(),
+#                 data_message=data_payload,
+#                 sound=True
+#             )
+#     except:
+#         pass

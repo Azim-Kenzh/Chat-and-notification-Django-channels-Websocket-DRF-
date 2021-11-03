@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'chat',
     'account',
-    'notification',
+    # 'notification',
 ]
 
 AUTH_USER_MODEL = 'account.MyUser'

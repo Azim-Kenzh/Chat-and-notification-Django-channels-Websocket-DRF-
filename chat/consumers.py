@@ -3,20 +3,23 @@ import json
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from .serializer import MessageSerializer
 from .models import Message, ChatSession, ChatStatus, Notification
-from notification.models import PushNotification
+# from notification.models import PushNotification
 
 User = get_user_model()
 
 
 NEW_MESSAGE = 'new_message'
+# READ_CHAT = 'read_chat'
+# READ_FORUM = 'read_forum'
 
 
 @database_sync_to_async
-def get_chat(current_user, chat_id):
-    chat = ChatSession.objects.filter(pk=int(chat_id)).select_related('owner', 'other_side').first()
+def get_chat(current_user, user_id):
+    chat = ChatSession.objects.filter(Q(owner=int(user_id), user=current_user) | Q(user=int(user_id), owner=current_user)).select_related('owner', 'other_side').first()
     user = chat.get_interlocutor(current_user)
     if current_user.user_blocks.filter(blocked_user=user).exists():
         return user, None
@@ -26,7 +29,7 @@ def get_chat(current_user, chat_id):
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.other_side, self.chat = await get_chat(self.scope['user'],
-                                                    self.scope['url_route']['kwargs']['chat_id'])
+                                                    self.scope['url_route']['kwargs']['user_id'])
         if self.chat is None:  # the other side is blocked by user
             await self.disconnect()
         self.group_name = f'chat_{self.chat.id}_{self.scope["user"].id}'       # group for user
@@ -51,29 +54,29 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # Receive message from WebSocket
     async def receive(self, text_data):
         data = json.loads(text_data)
-        sending_data = None
+        response_data = None
 
-        sending_data = await create_message(
+        chat_is_open = await check_chat_status(self.scope['user'], self.chat)
+        response_data = await create_message(
             self.scope['user'],
             self.chat,
-            data['text']
+            data['text'],
         )
-        sending_data = {'event': data['event'], "message": sending_data}
+        response_data = {'event': data['event'], "message": response_data}
         await self.channel_layer.group_send(
             self.group_name,
             {
                 'type': 'chat_message',
-                'data': sending_data,
+                'data': response_data,
             }
         )
-        chat_is_open = await check_chat_status(self.scope['user'], self.chat)
         if chat_is_open:
             # chat is open, send new message
             await self.channel_layer.group_send(
                 self.interlocutor_group,
                 {
                     'type': 'chat_message',
-                    'data': sending_data,
+                    'data': response_data,
                 }
             )
         else:
@@ -83,7 +86,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 f'user_{self.scope["user"].id}',
                 {
                     'type': 'notify',
-                    'data': sending_data,
+                    'data': response_data,
                 }
             )
 
@@ -110,8 +113,8 @@ def mark_as_read(user, other_side, chat):
     messages = Message.objects.filter(sender=other_side, chat_id=chat)
     messages.update(read=True)
     # mark message related notifications as read
-    PushNotification.objects.filter(recipient=user, read=False,
-                                    object_id=str(other_side.id)).update(read=True)
+    # PushNotification.objects.filter(recipient=user, read=False,
+    #                                 object_id=str(other_side.id)).update(read=True)
     if messages:
         return messages.last().id
     else:

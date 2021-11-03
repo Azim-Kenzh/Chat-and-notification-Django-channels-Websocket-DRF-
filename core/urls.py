@@ -19,10 +19,12 @@ from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework.routers import DefaultRouter
 
-# from chat.views import *
+from chat.views import *
 
 router = DefaultRouter()
-# router.register('chats/chats', ChatViewSet)
+router.register('chats/users', ChatUsersViewSet)
+router.register('chats/chat', ChatMessagesViewSet)
+router.register('chats/notification', UpdateNotificationViewSet)
 # router.register('chats/users', ChatUserViewSet)
 # router.register('chats/message', MessageViewSet)
 # router.register('chats/notification', NotificationViewSet)
@@ -40,8 +42,8 @@ schema_view = get_schema_view(
 urlpatterns = [
     path('docs/', schema_view.with_ui()),
     path('admin/', admin.site.urls),
-    path('chat/', include('chat.urls')),
-    path('account/', include('account.urls')),
+    path('chats/', include('chat.urls')),
+    path('accounts/', include('account.urls')),
     path('', include(router.urls)),
 ]
 
