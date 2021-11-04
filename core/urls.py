@@ -23,7 +23,7 @@ from chat.views import *
 
 router = DefaultRouter()
 router.register('chats/users', ChatUsersViewSet)
-router.register('chats/chat', ChatMessagesViewSet)
+router.register('chats/messages', ChatMessagesViewSet)
 router.register('chats/notification', UpdateNotificationViewSet)
 # router.register('chats/users', ChatUserViewSet)
 # router.register('chats/message', MessageViewSet)

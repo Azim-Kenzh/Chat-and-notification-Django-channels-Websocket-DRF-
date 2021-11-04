@@ -7,6 +7,7 @@ from channels.http import AsgiHandler
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 import chat.routing
+from chat.middlewares import QueryAuthMiddleware
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 django.setup()
@@ -14,7 +15,7 @@ django.setup()
 
 application = ProtocolTypeRouter({
   "http": get_asgi_application(),
-  "websocket": AuthMiddlewareStack(
+  "websocket": QueryAuthMiddleware(
         URLRouter(
             chat.routing.websocket_urlpatterns
         )

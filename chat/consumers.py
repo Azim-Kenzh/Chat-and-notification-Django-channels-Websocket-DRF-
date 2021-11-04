@@ -19,10 +19,8 @@ NEW_MESSAGE = 'new_message'
 
 @database_sync_to_async
 def get_chat(current_user, user_id):
-    chat = ChatSession.objects.filter(Q(owner=int(user_id), user=current_user) | Q(user=int(user_id), owner=current_user)).select_related('owner', 'other_side').first()
+    chat = ChatSession.objects.filter(Q(owner=int(user_id), other_side=current_user) | Q(other_side=int(user_id), owner=current_user)).select_related('owner', 'other_side').first()
     user = chat.get_interlocutor(current_user)
-    if current_user.user_blocks.filter(blocked_user=user).exists():
-        return user, None
     return user, chat
 
 
@@ -41,7 +39,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
         await self.accept()
-        await update_chat_status(self.chat, self.scope['user'], True)
+        await update_chat_status(self.scope['user'], self.chat, True)
 
     async def disconnect(self, close_code):
         # Leave group
@@ -49,18 +47,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.group_name,
             self.channel_name
         )
-        await update_chat_status(self.chat, self.scope['user'], False)
+        await update_chat_status(self.scope['user'], self.chat, False)
 
     # Receive message from WebSocket
     async def receive(self, text_data):
         data = json.loads(text_data)
-        response_data = None
 
         chat_is_open = await check_chat_status(self.scope['user'], self.chat)
         response_data = await create_message(
             self.scope['user'],
             self.chat,
-            data['text'],
+            data['message'],
         )
         response_data = {'event': data['event'], "message": response_data}
         await self.channel_layer.group_send(
@@ -97,8 +94,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
 
 @database_sync_to_async
-def create_message(sender, chat, text):
-    message = Message.objects.create(chat=chat, sender=sender, text=text)
+def create_message(sender, chat, message):
+    message = Message.objects.create(chat=chat, sender=sender, message=message)
     return MessageSerializer(message).data
 
 
@@ -123,14 +120,14 @@ def mark_as_read(user, other_side, chat):
 
 @database_sync_to_async
 def update_chat_status(user, chat, is_current):
-    chat_status = ChatStatus.objects.get_or_create(chat=chat, user=user)
+    chat_status, created = ChatStatus.objects.get_or_create(chat=chat, user=user)
     chat_status.current = is_current
     chat_status.save()
 
 
 @database_sync_to_async
 def check_chat_status(user, chat):
-    chat_status = ChatStatus.objects.get_or_create(chat=chat, user=user)
+    chat_status, created = ChatStatus.objects.get_or_create(chat=chat, user=user)
     return chat_status.current
 
 
@@ -158,3 +155,8 @@ class NotificationConsumer(AsyncWebsocketConsumer):
     async def notify(self, event):
         # Send message to WebSocket
         await self.send(text_data=json.dumps(event['data']))
+
+
+# url = 'ws://127.0.0.1:8080/ws/chat/2/?token=f4207d5feb209597bf52da41fedea29d12a82249'
+# server = new WebSocket(url)
+# server.send(JSON.stringify({event: 'new_message', message:'TEST'}))

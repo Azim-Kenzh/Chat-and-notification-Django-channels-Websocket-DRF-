@@ -28,12 +28,23 @@ from account.models import MyUser
 from chat.models import Message, ChatSession, Notification
 
 
+class ImageUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MyUser
+        fields = ('image', )
+
+
 class MessageSerializer(serializers.ModelSerializer):
-    # created_at = serializers.DateTimeField(auto_now_add=True)
+    created_at = serializers.DateTimeField(format='%d.%m.%Y  %H:%M', read_only=True)
 
     class Meta:
         model = Message
         fields = '__all__'
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['first_name'] = instance.sender.first_name
+        return representation
 
 
 class UpdateNotificationSerializer(serializers.ModelSerializer):

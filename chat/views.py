@@ -114,7 +114,7 @@ class ChatUsersViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
                    Q(other_side_id=OuterRef('pk'), owner_id=request.user.id))
         queryset = queryset.\
             annotate(has_unread=Exists(notification), chat_exists=Exists(chat)).\
-            order_by('-chat_exists', 'first_name')
+            order_by('-chat_exists')
         serializer = self.get_serializer(
             queryset, many=True, context={'request': request}
         )
